@@ -1,0 +1,7 @@
+LIBTUSK_1 {
+    global:
+        libtusk_analyze;
+        libtusk_free;
+    local:
+        *;
+};
