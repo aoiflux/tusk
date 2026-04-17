@@ -1,6 +1,12 @@
+<div align="center">
+  <img src="logo.svg" alt="tusk logo" width="220"/>
+</div>
+
 # tusk
 
-A disk-image analysis library and tool built on top of [The Sleuth Kit (libtsk)](https://www.sleuthkit.org/) and zlib.
+A **C ABI wrapper library and tool** around [The Sleuth Kit (libtsk)](https://www.sleuthkit.org/) and zlib.
+
+`tusk` bridges native disk-forensic power to any language that can speak **FFI, CGO, or C bindings** — Go, Rust, Python, C#, Java, and beyond — without requiring callers to deal with libtsk's raw C++ API directly. It exposes a clean, stable C ABI surface (`libtusk`) that higher-level runtimes can load and call without friction, while the bundled `tsktool` binary covers direct command-line forensic workloads.
 
 Two platform builds are provided:
 
