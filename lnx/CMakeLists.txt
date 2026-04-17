@@ -11,8 +11,8 @@ option(BUILD_SHARED_WRAPPER "Build shared libtusk library" ON)
 option(BUILD_TOOL "Build standalone binary" ON)
 
 # Custom static toolchain location
-set(FOR_LIB_DIR "/home/mew/tusk/lib")
-set(FOR_INC_DIR "/home/mew/tusk/include")
+set(FOR_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+set(FOR_INC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 include_directories(${FOR_INC_DIR})
 link_directories(${FOR_LIB_DIR})
