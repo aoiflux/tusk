@@ -111,6 +111,26 @@ END
                 COMMENT "Creating fat archive libtusk_fat.a"
                 VERBATIM
             )
+        else()
+            # Build a fat archive for Linux: merge libtusk wrapper + libtsk_lnx.a + libz_lnx.a
+            # into one self-contained archive using ar MRI script mode.
+            set(FAT_ARCHIVE "${CMAKE_CURRENT_BINARY_DIR}/libtusk_fat.a")
+            set(FAT_MRI     "${CMAKE_CURRENT_BINARY_DIR}/libtusk_fat.mri")
+
+            file(GENERATE OUTPUT "${FAT_MRI}" CONTENT
+"CREATE ${FAT_ARCHIVE}
+ADDLIB $<TARGET_FILE:tusk_static>
+ADDLIB ${FOR_LIB_DIR}/libtsk_lnx.a
+ADDLIB ${FOR_LIB_DIR}/libz_lnx.a
+SAVE
+END
+")
+
+            add_custom_command(TARGET tusk_static POST_BUILD
+                COMMAND ${CMAKE_AR} -M < "${FAT_MRI}"
+                COMMENT "Creating fat archive libtusk_fat.a (Linux)"
+                VERBATIM
+            )
         endif()
     endif()
 

@@ -110,15 +110,21 @@ flowchart LR
 
 > **Go / CGO note:** The `lnx/` build has full Go CGO support on two fronts:
 >
-> - **Linux → Linux:** the standard `libtusk.a` static archive links directly
->   into a CGO build with no extra setup.
-> - **Linux → Windows (cross-compilation):** MinGW cross-compilation is
->   configured in `lnx/cmake/mingw-toolchain.cmake`. This produces a **fat
->   static archive** (`libtusk_fat.a`) that bundles libtusk, libtsk, and zlib
->   all compiled with MinGW, allowing Go's CGO toolchain (which uses MinGW under
->   the hood) to link against a single self-contained archive on Windows. See
+> - **Linux → Linux:** Use `lnx/build/libtusk_fat.a` — the fat static archive
+>   that bundles libtusk, libtsk, and zlib into one fully self-contained file.
+>   This is the recommended artifact for CGO; it requires no extra `-l` flags
+>   and avoids version mismatches against system libraries. (`libtusk.a` is the
+>   thin wrapper-only archive and is available if you prefer to manage
+>   dependencies yourself.)
+> - **Linux → Windows (cross-compilation):** Use `lnx/build-mingw/libtusk_fat.a`
+>   — the MinGW fat archive that bundles all three libraries compiled with the
+>   MinGW toolchain, ready for Go's CGO on Windows with no extra dependencies.
+>   See
 >   [Cross-compiling for Windows](#cross-compiling-for-windows-mingw-fat-archive)
 >   below for full setup instructions.
+>
+> **In both cases `libtusk_fat.a` is the right choice for CGO** — it is a truly
+> static, fully self-contained build.
 
 ### Prerequisites
 
@@ -184,11 +190,12 @@ cmake -DBUILD_SHARED_WRAPPER=OFF ..
 
 ### Outputs
 
-| Output                                  | Description                                                   |
-| --------------------------------------- | ------------------------------------------------------------- |
-| `lnx/build/libtusk.a`                   | Static library                                                |
-| `lnx/build/libtusk.so` / `libtusk.so.1` | Shared library                                                |
-| `lnx/build/tsktool`                     | Fully static ELF (`-static -static-libgcc -static-libstdc++`) |
+| Output                                  | Description                                                         |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `lnx/build/libtusk.a`                   | Thin static library (libtusk wrapper only)                          |
+| `lnx/build/libtusk_fat.a`               | Fat static archive (libtusk + libtsk + zlib — fully self-contained) |
+| `lnx/build/libtusk.so` / `libtusk.so.1` | Shared library                                                      |
+| `lnx/build/tsktool`                     | Fully static ELF (`-static -static-libgcc -static-libstdc++`)       |
 
 ### Test
 
