@@ -12,6 +12,19 @@
             "displayName": "Linux Unix Makefiles",
             "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/build"
+        },
+        {
+            "name": "mingw-cross",
+            "displayName": "MinGW Cross Compile (Windows)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-mingw",
+            "toolchainFile": "${sourceDir}/cmake/mingw-toolchain.cmake",
+            "cacheVariables": {
+                "CMAKE_SYSTEM_NAME": "Windows",
+                "CMAKE_C_COMPILER": "x86_64-w64-mingw32-gcc",
+                "CMAKE_CXX_COMPILER": "x86_64-w64-mingw32-g++",
+                "CMAKE_RC_COMPILER": "x86_64-w64-mingw32-windres"
+            }
         }
     ]
 }

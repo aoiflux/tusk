@@ -486,7 +486,12 @@ extern "C"
             return nullptr;
         }
 
+#ifdef TSK_WIN32
+        std::wstring wpath(image_path, image_path + strlen(image_path));
+        TSK_IMG_INFO *img = tsk_img_open_sing(wpath.c_str(), TSK_IMG_TYPE_DETECT, 0);
+#else
         TSK_IMG_INFO *img = tsk_img_open_sing(image_path, TSK_IMG_TYPE_DETECT, 0);
+#endif
         if (!img)
         {
             return nullptr;

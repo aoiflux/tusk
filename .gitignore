@@ -1,3 +1,4 @@
 win/.vscode/*
 win/build/*
 lnx/build/*
+lnx/include/tsk/*

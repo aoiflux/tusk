@@ -12,6 +12,16 @@ RESET='\033[0m'
 
 LINE='──────────────────────────────────────────────────────'
 
+# ─── Argument parsing ────────────────────────────────────────────────────────
+
+CROSS_MINGW=0
+for arg in "$@"; do
+    case "$arg" in
+        --mingw) CROSS_MINGW=1 ;;
+        *) printf "\n  ${RED}✘  Unknown argument: %s${RESET}\n\n" "$arg"; exit 1 ;;
+    esac
+done
+
 # ─── Dependency checks ───────────────────────────────────────────────────────
 
 if ! command -v cmake >/dev/null 2>&1; then
@@ -19,7 +29,26 @@ if ! command -v cmake >/dev/null 2>&1; then
     exit 1
 fi
 
-if command -v ninja >/dev/null 2>&1; then
+if [ "$CROSS_MINGW" -eq 1 ]; then
+    if ! command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
+        printf "\n  ${RED}✘  x86_64-w64-mingw32-gcc not found. Install mingw-w64 and try again.${RESET}\n\n"
+        exit 1
+    fi
+    PRESET='mingw-cross'
+    BUILD_TOOL_LABEL='MinGW cross-compile'
+    if command -v ninja >/dev/null 2>&1; then
+        JOBS="$(nproc)"
+        BUILD_CMD="ninja -j$JOBS"
+    else
+        printf "  ${ORANGE}⚠  ninja not found — falling back to make.${RESET}\n\n"
+        if ! command -v make >/dev/null 2>&1; then
+            printf "  ${RED}✘  make not found. Please install make or ninja-build.${RESET}\n\n"
+            exit 1
+        fi
+        JOBS="$(nproc)"
+        BUILD_CMD="make -j$JOBS"
+    fi
+elif command -v ninja >/dev/null 2>&1; then
     PRESET='linux-ninja'
     JOBS="$(nproc)"
     BUILD_CMD="ninja -j$JOBS"
@@ -46,7 +75,11 @@ printf "  ${DCYAN}%s${RESET}\n\n" "$LINE"
 # ─── Configure ───────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/build"
+if [ "$CROSS_MINGW" -eq 1 ]; then
+    BUILD_DIR="$SCRIPT_DIR/build-mingw"
+else
+    BUILD_DIR="$SCRIPT_DIR/build"
+fi
 
 printf "  ${YELLOW}►  Creating build directory...${RESET}\n"
 mkdir -p "$BUILD_DIR"
