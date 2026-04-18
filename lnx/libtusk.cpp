@@ -26,6 +26,18 @@ namespace
         std::vector<FragmentRange> fragments;
     };
 
+    struct PartitionReport
+    {
+        std::string name;
+        uint64_t start_offset = 0;
+        uint64_t end_offset = 0;
+        bool has_filesystem = false;
+        std::string fs_type_name;
+        uint32_t fs_block_size = 0;
+        uint64_t fs_offset_in_image = 0;
+        std::vector<FileFragmentReport> files;
+    };
+
     bool is_dot_entry(const char *name)
     {
         return strcmp(name, ".") == 0 || strcmp(name, "..") == 0;
@@ -210,39 +222,57 @@ namespace
     }
 
     std::string generate_json_report(const std::string &image_path,
-                                     const TSK_FS_INFO *fs,
-                                     const std::vector<FileFragmentReport> &reports)
+                                     const std::vector<PartitionReport> &partitions)
     {
         std::ostringstream out;
 
         out << "{\n";
         out << "  \"image\": \"" << escape_json_string(image_path) << "\",\n";
-        if (fs)
-        {
-            out << "  \"filesystem\": {\n";
-            out << "    \"type\": \"" << get_fs_type_name(fs->ftype) << "\",\n";
-            out << "    \"block_size\": " << fs->block_size << ",\n";
-            out << "    \"offset\": " << fs->offset << "\n";
-            out << "  },\n";
-        }
-        out << "  \"files\": [\n";
+        out << "  \"partitions\": [\n";
 
-        for (size_t i = 0; i < reports.size(); ++i)
+        for (size_t pi = 0; pi < partitions.size(); ++pi)
         {
-            const FileFragmentReport &report = reports[i];
+            const PartitionReport &part = partitions[pi];
             out << "    {\n";
-            out << "      \"filename\": \"" << escape_json_string(report.filename) << "\",\n";
-            out << "      \"type\": \"" << report.type << "\",\n";
-            out << "      \"is_fragmented\": " << (report.is_fragmented ? "true" : "false") << ",\n";
-            out << "      \"size\": " << report.size << ",\n";
-            out << "      \"fragments\": [\n";
-
-            for (size_t j = 0; j < report.fragments.size(); ++j)
+            out << "      \"name\": \"" << escape_json_string(part.name) << "\",\n";
+            out << "      \"start_offset\": " << part.start_offset << ",\n";
+            out << "      \"end_offset\": " << part.end_offset << ",\n";
+            if (part.has_filesystem)
             {
-                const FragmentRange &fragment = report.fragments[j];
-                out << "        {\"start_offset\": " << fragment.start_offset
-                    << ", \"end_offset\": " << fragment.end_offset << "}";
-                if (j + 1 < report.fragments.size())
+                out << "      \"filesystem\": {\n";
+                out << "        \"type\": \"" << escape_json_string(part.fs_type_name) << "\",\n";
+                out << "        \"block_size\": " << part.fs_block_size << ",\n";
+                out << "        \"offset\": " << part.fs_offset_in_image << "\n";
+                out << "      },\n";
+            }
+            out << "      \"files\": [\n";
+
+            const std::vector<FileFragmentReport> &reports = part.files;
+            for (size_t i = 0; i < reports.size(); ++i)
+            {
+                const FileFragmentReport &report = reports[i];
+                out << "        {\n";
+                out << "          \"filename\": \"" << escape_json_string(report.filename) << "\",\n";
+                out << "          \"type\": \"" << report.type << "\",\n";
+                out << "          \"is_fragmented\": " << (report.is_fragmented ? "true" : "false") << ",\n";
+                out << "          \"size\": " << report.size << ",\n";
+                out << "          \"fragments\": [\n";
+
+                for (size_t j = 0; j < report.fragments.size(); ++j)
+                {
+                    const FragmentRange &fragment = report.fragments[j];
+                    out << "            {\"start_offset\": " << fragment.start_offset
+                        << ", \"end_offset\": " << fragment.end_offset << "}";
+                    if (j + 1 < report.fragments.size())
+                    {
+                        out << ",";
+                    }
+                    out << "\n";
+                }
+
+                out << "          ]\n";
+                out << "        }";
+                if (i + 1 < reports.size())
                 {
                     out << ",";
                 }
@@ -251,7 +281,7 @@ namespace
 
             out << "      ]\n";
             out << "    }";
-            if (i + 1 < reports.size())
+            if (pi + 1 < partitions.size())
             {
                 out << ",";
             }
@@ -325,91 +355,69 @@ namespace
         return reports;
     }
 
-    uint64_t find_filesystem_offset(TSK_IMG_INFO *img)
+    std::vector<PartitionReport> analyze_image(TSK_IMG_INFO *img)
     {
+        std::vector<PartitionReport> partitions;
+
         if (!img)
         {
-            return 0;
-        }
-
-        TSK_FS_INFO *fs_at_zero = tsk_fs_open_img(img, 0, TSK_FS_TYPE_DETECT);
-        if (fs_at_zero)
-        {
-            tsk_fs_close(fs_at_zero);
-            return 0;
+            return partitions;
         }
 
         TSK_VS_INFO *vs = tsk_vs_open(img, 0, TSK_VS_TYPE_DETECT);
-        if (!vs)
+        if (vs)
         {
-            return 0;
-        }
-
-        uint64_t chosen_offset = 0;
-
-        for (size_t i = 0; i < vs->part_count; ++i)
-        {
-            const TSK_VS_PART_INFO *part = &vs->part_list[i];
-            if (!part)
+            size_t part_index = 0;
+            for (size_t i = 0; i < static_cast<size_t>(vs->part_count); ++i)
             {
-                continue;
+                const TSK_VS_PART_INFO *part = &vs->part_list[i];
+                if (!part || !(part->flags & TSK_VS_PART_FLAG_ALLOC))
+                {
+                    continue;
+                }
+
+                PartitionReport prpt;
+                prpt.name = "p" + std::to_string(part_index++);
+                prpt.start_offset = static_cast<uint64_t>(part->start) * vs->block_size;
+                prpt.end_offset = prpt.start_offset + static_cast<uint64_t>(part->len) * vs->block_size - 1;
+
+                TSK_FS_INFO *fs = tsk_fs_open_img(img, static_cast<TSK_OFF_T>(prpt.start_offset), TSK_FS_TYPE_DETECT);
+                if (fs)
+                {
+                    prpt.has_filesystem = true;
+                    prpt.fs_type_name = get_fs_type_name(fs->ftype);
+                    prpt.fs_block_size = fs->block_size;
+                    prpt.fs_offset_in_image = static_cast<uint64_t>(fs->offset);
+                    prpt.files = walk_filesystem(fs);
+                    tsk_fs_close(fs);
+                }
+
+                partitions.push_back(std::move(prpt));
             }
-
-            if ((part->flags & TSK_VS_PART_FLAG_ALLOC) == 0)
-            {
-                continue;
-            }
-
-            const uint64_t candidate_offset = static_cast<uint64_t>(part->start) * vs->block_size;
-            TSK_FS_INFO *candidate_fs = tsk_fs_open_img(img, candidate_offset, TSK_FS_TYPE_DETECT);
-            if (candidate_fs)
-            {
-                chosen_offset = candidate_offset;
-                tsk_fs_close(candidate_fs);
-                break;
-            }
-        }
-
-        tsk_vs_close(vs);
-        return chosen_offset;
-    }
-
-    bool get_partition_offset(TSK_IMG_INFO *img, uint64_t partition_index, uint64_t &offset)
-    {
-        offset = 0;
-        if (!img)
-        {
-            return false;
-        }
-
-        TSK_VS_INFO *vs = tsk_vs_open(img, 0, TSK_VS_TYPE_DETECT);
-        if (!vs)
-        {
-            return false;
-        }
-
-        if (partition_index >= vs->part_count)
-        {
             tsk_vs_close(vs);
-            return false;
+            return partitions;
         }
 
-        const TSK_VS_PART_INFO *part = &vs->part_list[partition_index];
-        if (!part)
+        // No volume system detected - treat entire image as a single partition
+        TSK_FS_INFO *fs = tsk_fs_open_img(img, 0, TSK_FS_TYPE_DETECT);
+        if (fs)
         {
-            tsk_vs_close(vs);
-            return false;
+            PartitionReport prpt;
+            prpt.name = "p0";
+            prpt.start_offset = 0;
+            prpt.end_offset = static_cast<uint64_t>(img->size) > 0
+                                  ? static_cast<uint64_t>(img->size) - 1
+                                  : 0;
+            prpt.has_filesystem = true;
+            prpt.fs_type_name = get_fs_type_name(fs->ftype);
+            prpt.fs_block_size = fs->block_size;
+            prpt.fs_offset_in_image = static_cast<uint64_t>(fs->offset);
+            prpt.files = walk_filesystem(fs);
+            tsk_fs_close(fs);
+            partitions.push_back(std::move(prpt));
         }
 
-        if ((part->flags & TSK_VS_PART_FLAG_ALLOC) == 0)
-        {
-            tsk_vs_close(vs);
-            return false;
-        }
-
-        offset = static_cast<uint64_t>(part->start) * vs->block_size;
-        tsk_vs_close(vs);
-        return true;
+        return partitions;
     }
 
     TSK_FS_FILE *find_file_by_path(TSK_FS_INFO *fs, const std::string &path)
@@ -484,18 +492,9 @@ extern "C"
             return nullptr;
         }
 
-        uint64_t fs_offset = find_filesystem_offset(img);
-        TSK_FS_INFO *fs = tsk_fs_open_img(img, fs_offset, TSK_FS_TYPE_DETECT);
-        if (!fs)
-        {
-            tsk_img_close(img);
-            return nullptr;
-        }
+        std::vector<PartitionReport> partitions = analyze_image(img);
+        std::string json = generate_json_report(image_path, partitions);
 
-        std::vector<FileFragmentReport> reports = walk_filesystem(fs);
-        std::string json = generate_json_report(image_path, fs, reports);
-
-        tsk_fs_close(fs);
         tsk_img_close(img);
 
         // Allocate and return JSON string
