@@ -29,6 +29,7 @@ namespace
         std::string filename;
         std::string type;
         bool is_fragmented = false;
+        bool is_deleted = false;
         uint64_t size = 0;
         std::vector<FragmentRange> fragments;
     };
@@ -146,6 +147,7 @@ namespace
         }
 
         report.size = static_cast<uint64_t>(file->meta->size);
+        report.is_deleted = (file->meta->flags & TSK_FS_META_FLAG_UNALLOC) != 0;
         report.fragments = collect_file_fragments(file, fs);
 
         report.is_fragmented = report.fragments.size() > 1;
@@ -344,6 +346,7 @@ namespace
                 out << "          \"filename\": \"" << escape_json_string(report.filename) << "\",\n";
                 out << "          \"type\": \"" << report.type << "\",\n";
                 out << "          \"is_fragmented\": " << (report.is_fragmented ? "true" : "false") << ",\n";
+                out << "          \"is_deleted\": " << (report.is_deleted ? "true" : "false") << ",\n";
                 out << "          \"size\": " << report.size << ",\n";
                 out << "          \"fragments\": [\n";
 
@@ -412,6 +415,10 @@ namespace
             if (file->meta->type == TSK_FS_META_TYPE_REG || file->meta->type == TSK_FS_META_TYPE_DIR)
             {
                 reports.push_back(build_fragment_report(full_path, file, fs));
+                if (entry->flags & TSK_FS_NAME_FLAG_UNALLOC)
+                {
+                    reports.back().is_deleted = true;
+                }
             }
 
             // Recurse into subdirectories
