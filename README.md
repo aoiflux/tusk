@@ -302,6 +302,60 @@ CGO on Windows.
 
 ---
 
+### Compiling with Zig (`zig-linux` preset)
+
+The `zig-linux` CMake preset builds libtusk using the Zig compiler as a drop-in
+C/C++ toolchain (via the shim scripts in `lnx/cmake/`). Because all object files
+in a fat static archive must be produced by the same toolchain, **libtsk and
+zlib must also be compiled with Zig** before building with this preset.
+
+Using the native `libtsk.a` and `libz.a` from system packages or a GCC build
+will cause linker errors due to ABI and runtime mismatches between Zig's
+musl-based libc and glibc-linked system archives.
+
+#### 1. Build zlib with Zig
+
+```bash
+wget https://zlib.net/zlib-1.3.1.tar.gz
+tar xf zlib-1.3.1.tar.gz && cd zlib-1.3.1
+CC="zig cc -target x86_64-linux-musl" AR="zig ar" \
+  RANLIB="zig ranlib" \
+  ./configure --static --prefix=/tmp/zig-sysroot
+make -j$(nproc) && make install
+cp /tmp/zig-sysroot/lib/libz.a /path/to/tusk/lnx/lib/libz_zig.a
+```
+
+#### 2. Build libtsk with Zig
+
+```bash
+# Inside the Sleuth Kit source directory:
+./configure --disable-shared \
+    CC="zig cc -target x86_64-linux-musl" \
+    CXX="zig c++ -target x86_64-linux-musl" \
+    AR="zig ar" RANLIB="zig ranlib" \
+    --prefix=/tmp/zig-sysroot
+make -j$(nproc) && make install
+cp /tmp/zig-sysroot/lib/libtsk.a /path/to/tusk/lnx/lib/libtsk_zig.a
+```
+
+#### 3. Update `lnx/CMakeLists.txt`
+
+Point `LIBTSK_LIB` and `LIBZ_LIB` at the Zig-built archives before configuring
+with the `zig-linux` preset.
+
+#### 4. Build
+
+```bash
+cd lnx
+cmake --preset zig-linux
+cmake --build build-zig
+```
+
+Output: `lnx/build-zig/libtusk_fat.a` — a self-contained archive built entirely
+with the Zig toolchain.
+
+---
+
 ## Windows (`win/`)
 
 > **Visual Studio / Go note:** The `win/` project is built with MSVC (Visual

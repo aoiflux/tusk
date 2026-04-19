@@ -15,12 +15,19 @@ LINE='────────────────────────�
 # ─── Argument parsing ────────────────────────────────────────────────────────
 
 CROSS_MINGW=0
+ZIG=0
 for arg in "$@"; do
     case "$arg" in
         --mingw) CROSS_MINGW=1 ;;
+        --zig)   ZIG=1 ;;
         *) printf "\n  ${RED}✘  Unknown argument: %s${RESET}\n\n" "$arg"; exit 1 ;;
     esac
 done
+
+if [ "$CROSS_MINGW" -eq 1 ] && [ "$ZIG" -eq 1 ]; then
+    printf "\n  ${RED}✘  --mingw and --zig are mutually exclusive.${RESET}\n\n"
+    exit 1
+fi
 
 # ─── Dependency checks ───────────────────────────────────────────────────────
 
@@ -48,6 +55,26 @@ if [ "$CROSS_MINGW" -eq 1 ]; then
         JOBS="$(nproc)"
         BUILD_CMD="make -j$JOBS"
     fi
+elif [ "$ZIG" -eq 1 ]; then
+    if ! command -v zig >/dev/null 2>&1; then
+        printf "\n  ${RED}✘  zig not found in PATH. Please install Zig and try again.${RESET}\n\n"
+        exit 1
+    fi
+    if ! command -v ninja >/dev/null 2>&1; then
+        printf "\n  ${RED}✘  ninja not found. The zig-linux preset requires Ninja. Install ninja-build and try again.${RESET}\n\n"
+        exit 1
+    fi
+    # Ensure wrapper scripts are executable (they may lose the bit after a git clone on some systems)
+    SCRIPT_DIR_EARLY="$(cd "$(dirname "$0")" && pwd)"
+    chmod +x \
+        "$SCRIPT_DIR_EARLY/cmake/zig-cc.sh" \
+        "$SCRIPT_DIR_EARLY/cmake/zig-c++.sh" \
+        "$SCRIPT_DIR_EARLY/cmake/zig-ar.sh" \
+        "$SCRIPT_DIR_EARLY/cmake/zig-ranlib.sh"
+    PRESET='zig-linux'
+    BUILD_TOOL_LABEL='Zig'
+    JOBS="$(nproc)"
+    BUILD_CMD="ninja -j$JOBS"
 elif command -v ninja >/dev/null 2>&1; then
     PRESET='linux-ninja'
     JOBS="$(nproc)"
@@ -77,6 +104,8 @@ printf "  ${DCYAN}%s${RESET}\n\n" "$LINE"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ "$CROSS_MINGW" -eq 1 ]; then
     BUILD_DIR="$SCRIPT_DIR/build-mingw"
+elif [ "$ZIG" -eq 1 ]; then
+    BUILD_DIR="$SCRIPT_DIR/build-zig"
 else
     BUILD_DIR="$SCRIPT_DIR/build"
 fi

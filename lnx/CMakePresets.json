@@ -25,6 +25,13 @@
                 "CMAKE_CXX_COMPILER": "x86_64-w64-mingw32-g++",
                 "CMAKE_RC_COMPILER": "x86_64-w64-mingw32-windres"
             }
+        },
+        {
+            "name": "zig-linux",
+            "displayName": "Zig (Linux native)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-zig",
+            "toolchainFile": "${sourceDir}/cmake/zig-toolchain.cmake"
         }
     ]
 }
