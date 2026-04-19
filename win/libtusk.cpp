@@ -375,10 +375,9 @@ namespace
         if (vs)
         {
             size_t part_index = 0;
-            for (size_t i = 0; i < static_cast<size_t>(vs->part_count); ++i)
+            for (const TSK_VS_PART_INFO *part = vs->part_list; part != nullptr; part = part->next)
             {
-                const TSK_VS_PART_INFO *part = &vs->part_list[i];
-                if (!part || !(part->flags & TSK_VS_PART_FLAG_ALLOC))
+                if (!(part->flags & TSK_VS_PART_FLAG_ALLOC))
                 {
                     continue;
                 }

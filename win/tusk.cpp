@@ -393,12 +393,11 @@ namespace
 
         std::cout << "Partition Table Detected\n";
 
-        for (size_t i = 0; i < vs->part_count; i++)
+        size_t i = 0;
+        for (const TSK_VS_PART_INFO *p = vs->part_list; p != nullptr; p = p->next, ++i)
         {
-            const TSK_VS_PART_INFO *p = &vs->part_list[i];
-
-            uint64_t start_bytes = p->start * vs->block_size;
-            uint64_t size_bytes = p->len * vs->block_size;
+            uint64_t start_bytes = static_cast<uint64_t>(p->start) * vs->block_size;
+            uint64_t size_bytes = static_cast<uint64_t>(p->len) * vs->block_size;
 
             std::cout << "  [" << i << "] "
                       << "Start: " << start_bytes
@@ -423,10 +422,9 @@ namespace
         if (vs)
         {
             size_t part_index = 0;
-            for (size_t i = 0; i < static_cast<size_t>(vs->part_count); ++i)
+            for (const TSK_VS_PART_INFO *part = vs->part_list; part != nullptr; part = part->next)
             {
-                const TSK_VS_PART_INFO *part = &vs->part_list[i];
-                if (!part || !(part->flags & TSK_VS_PART_FLAG_ALLOC))
+                if (!(part->flags & TSK_VS_PART_FLAG_ALLOC))
                 {
                     continue;
                 }
