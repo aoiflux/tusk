@@ -36,6 +36,8 @@ namespace
     struct PartitionReport
     {
         std::string name;
+        std::string desc;
+        std::string volume_label;
         uint64_t start_offset = 0;
         uint64_t end_offset = 0;
         bool has_filesystem = false;
@@ -228,6 +230,84 @@ namespace
         }
     }
 
+    std::string utf16le_to_utf8(const uint8_t *buf, size_t byte_len)
+    {
+        std::string out;
+        for (size_t i = 0; i + 1 < byte_len; i += 2)
+        {
+            uint32_t ch = static_cast<uint32_t>(buf[i]) | (static_cast<uint32_t>(buf[i + 1]) << 8);
+            if (ch == 0)
+                break;
+            if (ch < 0x80)
+            {
+                out += static_cast<char>(ch);
+            }
+            else if (ch < 0x800)
+            {
+                out += static_cast<char>(0xC0 | (ch >> 6));
+                out += static_cast<char>(0x80 | (ch & 0x3F));
+            }
+            else
+            {
+                out += static_cast<char>(0xE0 | (ch >> 12));
+                out += static_cast<char>(0x80 | ((ch >> 6) & 0x3F));
+                out += static_cast<char>(0x80 | (ch & 0x3F));
+            }
+        }
+        return out;
+    }
+
+    std::string get_volume_label(TSK_FS_INFO *fs)
+    {
+        if (!fs)
+            return "";
+
+        // NTFS: read $VOLUME_NAME attribute (type 0x60) from $Volume (inode 3)
+        if (fs->ftype == TSK_FS_TYPE_NTFS)
+        {
+            TSK_FS_FILE *vol_file = tsk_fs_file_open_meta(fs, nullptr, 3);
+            if (vol_file)
+            {
+                const TSK_FS_ATTR *attr = tsk_fs_file_attr_get_type(
+                    vol_file, TSK_FS_ATTR_TYPE_NTFS_VNAME, 0, 0);
+                if (attr && (attr->flags & TSK_FS_ATTR_RES) &&
+                    attr->rd.buf && attr->size > 0)
+                {
+                    std::string label = utf16le_to_utf8(
+                        attr->rd.buf, static_cast<size_t>(attr->size));
+                    tsk_fs_file_close(vol_file);
+                    return label;
+                }
+                tsk_fs_file_close(vol_file);
+            }
+            return "";
+        }
+
+        // FAT/exFAT: volume label appears as a VIRT entry in the root directory
+        if (TSK_FS_TYPE_ISFAT(fs->ftype))
+        {
+            TSK_FS_DIR *root = tsk_fs_dir_open(fs, "/");
+            if (root)
+            {
+                for (size_t i = 0; i < root->names_used; ++i)
+                {
+                    const TSK_FS_NAME *entry = &root->names[i];
+                    if (!entry || !entry->name)
+                        continue;
+                    if (entry->type == TSK_FS_NAME_TYPE_VIRT)
+                    {
+                        std::string label = entry->name;
+                        tsk_fs_dir_close(root);
+                        return label;
+                    }
+                }
+                tsk_fs_dir_close(root);
+            }
+        }
+
+        return "";
+    }
+
     std::string generate_json_report(const std::string &image_path,
                                      const std::vector<PartitionReport> &partitions)
     {
@@ -242,12 +322,14 @@ namespace
             const PartitionReport &part = partitions[pi];
             out << "    {\n";
             out << "      \"name\": \"" << escape_json_string(part.name) << "\",\n";
+            out << "      \"desc\": \"" << escape_json_string(part.desc) << "\",\n";
             out << "      \"start_offset\": " << part.start_offset << ",\n";
             out << "      \"end_offset\": " << part.end_offset << ",\n";
             if (part.has_filesystem)
             {
                 out << "      \"filesystem\": {\n";
                 out << "        \"type\": \"" << escape_json_string(part.fs_type_name) << "\",\n";
+                out << "        \"volume_label\": \"" << escape_json_string(part.volume_label) << "\",\n";
                 out << "        \"block_size\": " << part.fs_block_size << ",\n";
                 out << "        \"offset\": " << part.fs_offset_in_image << "\n";
                 out << "      },\n";
@@ -384,6 +466,7 @@ namespace
 
                 PartitionReport prpt;
                 prpt.name = "p" + std::to_string(part_index++);
+                prpt.desc = (part->desc ? part->desc : "");
                 prpt.start_offset = static_cast<uint64_t>(part->start) * vs->block_size;
                 prpt.end_offset = prpt.start_offset + static_cast<uint64_t>(part->len) * vs->block_size - 1;
 
@@ -392,6 +475,7 @@ namespace
                 {
                     prpt.has_filesystem = true;
                     prpt.fs_type_name = get_fs_type_name(fs->ftype);
+                    prpt.volume_label = get_volume_label(fs);
                     prpt.fs_block_size = fs->block_size;
                     prpt.fs_offset_in_image = static_cast<uint64_t>(fs->offset);
                     prpt.files = walk_filesystem(fs);
@@ -416,6 +500,7 @@ namespace
                                   : 0;
             prpt.has_filesystem = true;
             prpt.fs_type_name = get_fs_type_name(fs->ftype);
+            prpt.volume_label = get_volume_label(fs);
             prpt.fs_block_size = fs->block_size;
             prpt.fs_offset_in_image = static_cast<uint64_t>(fs->offset);
             prpt.files = walk_filesystem(fs);
