@@ -31,6 +31,11 @@ namespace
         bool is_fragmented = false;
         bool is_deleted = false;
         uint64_t size = 0;
+        TSK_INUM_T inode = 0;
+        int64_t mtime = 0;
+        int64_t atime = 0;
+        int64_t ctime = 0;
+        int64_t crtime = 0;
         std::vector<FragmentRange> fragments;
     };
 
@@ -148,6 +153,11 @@ namespace
 
         report.size = static_cast<uint64_t>(file->meta->size);
         report.is_deleted = (file->meta->flags & TSK_FS_META_FLAG_UNALLOC) != 0;
+        report.inode = file->meta->addr;
+        report.mtime = static_cast<int64_t>(file->meta->mtime);
+        report.atime = static_cast<int64_t>(file->meta->atime);
+        report.ctime = static_cast<int64_t>(file->meta->ctime);
+        report.crtime = static_cast<int64_t>(file->meta->crtime);
         report.fragments = collect_file_fragments(file, fs);
 
         report.is_fragmented = report.fragments.size() > 1;
@@ -348,6 +358,11 @@ namespace
                 out << "          \"is_fragmented\": " << (report.is_fragmented ? "true" : "false") << ",\n";
                 out << "          \"is_deleted\": " << (report.is_deleted ? "true" : "false") << ",\n";
                 out << "          \"size\": " << report.size << ",\n";
+                out << "          \"inode\": " << report.inode << ",\n";
+                out << "          \"mtime\": " << report.mtime << ",\n";
+                out << "          \"atime\": " << report.atime << ",\n";
+                out << "          \"ctime\": " << report.ctime << ",\n";
+                out << "          \"crtime\": " << report.crtime << ",\n";
                 out << "          \"fragments\": [\n";
 
                 for (size_t j = 0; j < report.fragments.size(); ++j)
